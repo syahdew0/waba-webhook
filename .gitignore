@@ -1,2 +1,6 @@
 .env
 .DS_Store
+logs/
+node_modules/
+crm-ui/node_modules/
+crm-ui/dist/
