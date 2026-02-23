@@ -5,6 +5,8 @@ const ttlMs = Number(process.env.DEDUPE_TTL_MS || 86400000);
 const cleanupIntervalMs = Number(process.env.DEDUPE_CLEANUP_INTERVAL_MS || 600000);
 let cleanupTimer;
 const ALLOWED_STATUSES = new Set(["sent", "delivered", "read", "failed"]);
+const STATUS_RANK_SQL =
+  "CASE status WHEN 'read' THEN 4 WHEN 'delivered' THEN 3 WHEN 'sent' THEN 2 WHEN 'failed' THEN 1 ELSE 0 END";
 
 function fromUnixSeconds(value) {
   if (!value) return null;
@@ -164,16 +166,25 @@ async function insertStatusEvent(trx, ev) {
     .onConflict(["message_id", "status", "status_ts"])
     .ignore();
 
+  const latest = await trx("wa_message_status_events")
+    .select("status", "status_ts")
+    .where({ message_id: row.message_id })
+    .orderByRaw("COALESCE(status_ts, '1970-01-01 00:00:00') DESC")
+    .orderByRaw(`${STATUS_RANK_SQL} DESC`)
+    .first();
+
+  if (!latest) return;
+
   await trx("wa_message_status_latest")
     .insert({
       message_id: row.message_id,
-      latest_status: row.status,
-      latest_status_ts: row.status_ts,
+      latest_status: latest.status,
+      latest_status_ts: latest.status_ts,
     })
     .onConflict("message_id")
     .merge({
-      latest_status: row.status,
-      latest_status_ts: row.status_ts,
+      latest_status: latest.status,
+      latest_status_ts: latest.status_ts,
       updated_at: trx.fn.now(3),
     });
 }

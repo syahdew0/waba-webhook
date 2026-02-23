@@ -1,212 +1,51 @@
-:root {
-  --bg: #f6efe6;
-  --paper: #fffdfa;
-  --ink: #1f2a44;
-  --ink-muted: #5c6578;
-  --line: #dfd4c7;
-  --accent: #f26a2e;
-  --accent-2: #00a58e;
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  color: var(--ink);
-  background:
-    radial-gradient(1200px 300px at 10% -10%, #ffd9c7 0%, transparent 70%),
-    radial-gradient(900px 260px at 90% -20%, #c9f2ea 0%, transparent 70%),
-    var(--bg);
-  font-family: "Space Grotesk", sans-serif;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: 16px;
-  padding: 16px;
-  min-height: 100vh;
-}
-
-.sidebar,
-.content {
-  min-height: 0;
-}
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.sidebar-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-h1,
-h2 {
-  margin: 0;
-}
-
-.refresh {
-  border: 1px solid var(--line);
-  background: var(--paper);
-  border-radius: 10px;
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-.panel,
-.health-card {
-  border: 1px solid var(--line);
-  background: var(--paper);
-  border-radius: 14px;
-  padding: 12px;
-}
-
-.panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-}
-
-.panel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.pill {
-  background: var(--accent);
-  color: white;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 12px;
-}
-
-.conversation-item {
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
-  background: #ffffff;
-  border-radius: 10px;
-  padding: 10px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.conversation-item.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(242, 106, 46, 0.16);
-}
-
-.row-1,
-.row-3 {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.row-2,
-small,
-.muted,
-.health-meta,
-.bubble-time,
-.bubble-meta {
-  color: var(--ink-muted);
-}
-
-.status {
-  color: var(--accent-2);
-  font-weight: 600;
-}
-
-.thread-panel {
-  height: calc(100vh - 32px);
-}
-
-.thread-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.bubble {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 10px;
-  max-width: 76%;
-}
-
-.bubble.inbound {
-  background: #ffffff;
-  align-self: flex-start;
-}
-
-.bubble.outbound {
-  background: #ecfff8;
-  align-self: flex-end;
-}
-
-.bubble-meta {
-  display: flex;
-  gap: 8px;
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-
-.bubble-text {
-  white-space: pre-wrap;
-}
-
-.bubble-time,
-.mono {
-  margin-top: 8px;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 12px;
-}
-
-.health-title {
-  margin: 0;
-  font-size: 12px;
-  color: var(--ink-muted);
-}
-
-.health-state {
-  margin: 6px 0;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.health-state.up {
-  color: var(--accent-2);
-}
-
-.health-state.down {
-  color: #d54444;
-}
-
-@media (max-width: 960px) {
-  .layout {
-    grid-template-columns: 1fr;
+@layer base {
+  body {
+    @apply m-0 min-h-screen bg-[#f8efe4] text-slate-800 antialiased transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100;
+    background-image:
+      radial-gradient(1000px 260px at 8% -8%, #ffd9bf 0%, transparent 70%),
+      radial-gradient(900px 240px at 92% -12%, #c9f3e8 0%, transparent 72%);
   }
 
-  .thread-panel {
-    height: auto;
+  .dark body {
+    background-image:
+      radial-gradient(900px 280px at 10% -10%, #1f2937 0%, transparent 70%),
+      radial-gradient(1000px 260px at 90% -12%, #0f766e 0%, transparent 75%);
   }
 
-  .bubble {
-    max-width: 100%;
+  * {
+    @apply box-border;
+  }
+}
+
+@layer components {
+  .crm-card {
+    @apply rounded-2xl border border-[#e6d8c8] bg-[#fffdf9] shadow-[0_1px_2px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-900/80 dark:shadow-[0_1px_2px_rgba(0,0,0,0.35)];
+  }
+
+  .soft-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #d8c8b6 transparent;
+  }
+
+  .soft-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .soft-scroll::-webkit-scrollbar-thumb {
+    background: #d8c8b6;
+    border-radius: 999px;
+  }
+
+  .soft-scroll::-webkit-scrollbar-track {
+    background: transparent;
   }
 }

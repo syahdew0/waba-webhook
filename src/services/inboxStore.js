@@ -6,6 +6,8 @@ function toNumber(value, fallback) {
   return n;
 }
 
+const WINDOW_24H_MS = 24 * 60 * 60 * 1000;
+
 async function listConversations(options = {}) {
   const db = getDb();
   const limit = Math.min(Math.max(toNumber(options.limit, 50), 1), 200);
@@ -131,6 +133,7 @@ async function listMessagesByWaId(waId, options = {}) {
       interactive_type: row.interactive_type || null,
       interactive_id: row.interactive_id || null,
       interactive_title: row.interactive_title || null,
+      context_message_id: row.context_message_id || null,
       ts: row.message_ts || row.created_at || null,
       status: st?.latest_status || null,
       status_ts: st?.latest_status_ts || null,
@@ -139,7 +142,93 @@ async function listMessagesByWaId(waId, options = {}) {
   });
 }
 
+async function upsertContact(waId, profileName) {
+  if (!waId) return;
+  const db = getDb();
+  await db("wa_contacts")
+    .insert({
+      wa_id: waId,
+      profile_name: profileName || null,
+    })
+    .onConflict("wa_id")
+    .merge({
+      profile_name: profileName || null,
+      updated_at: db.fn.now(3),
+    });
+}
+
+async function saveOutboundMessage({
+  waId,
+  phoneNumberId,
+  messageId,
+  messageType,
+  body,
+  contextMessageId,
+  rawMessage,
+}) {
+  const db = getDb();
+  await upsertContact(waId, null);
+
+  await db("wa_messages")
+    .insert({
+      message_id: messageId,
+      direction: "outbound",
+      phone_number_id: phoneNumberId || "",
+      wa_id: waId,
+      message_type: messageType || "text",
+      text_body: body || null,
+      context_message_id: contextMessageId || null,
+      message_ts: new Date(),
+      raw_message: rawMessage || {},
+    })
+    .onConflict("message_id")
+    .merge({
+      text_body: body || null,
+      context_message_id: contextMessageId || null,
+      raw_message: rawMessage || {},
+      message_ts: new Date(),
+    });
+}
+
+async function getLastInboundMessageTime(waId) {
+  const db = getDb();
+  const row = await db("wa_messages")
+    .select("message_ts", "created_at")
+    .where({ wa_id: waId, direction: "inbound" })
+    .orderByRaw("COALESCE(message_ts, created_at) DESC")
+    .first();
+
+  if (!row) return null;
+  return row.message_ts || row.created_at || null;
+}
+
+async function getConversationWindowStatus(waId) {
+  const lastInboundAt = await getLastInboundMessageTime(waId);
+  if (!lastInboundAt) {
+    return {
+      is_open: false,
+      has_inbound: false,
+      last_inbound_at: null,
+      hours_since_last_inbound: null,
+    };
+  }
+
+  const last = new Date(lastInboundAt);
+  const diffMs = Date.now() - last.getTime();
+  const hours = diffMs / (60 * 60 * 1000);
+  const isOpen = diffMs <= WINDOW_24H_MS;
+
+  return {
+    is_open: isOpen,
+    has_inbound: true,
+    last_inbound_at: last.toISOString(),
+    hours_since_last_inbound: Number(hours.toFixed(2)),
+  };
+}
+
 module.exports = {
   listConversations,
   listMessagesByWaId,
+  saveOutboundMessage,
+  getConversationWindowStatus,
 };
