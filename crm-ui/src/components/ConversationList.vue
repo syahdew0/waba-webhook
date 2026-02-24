@@ -1,4 +1,6 @@
 <script setup>
+import { ref } from "vue";
+
 const statusClassMap = {
   sent: "text-amber-600 dark:text-amber-400",
   delivered: "text-cyan-700 dark:text-cyan-400",
@@ -20,10 +22,27 @@ defineProps({
   }
 });
 
-const emit = defineEmits(["select"]);
+const emit = defineEmits(["select", "open-wa"]);
+const newWaId = ref("");
+const newWaIdError = ref("");
 
 function onSelect(item) {
   emit("select", item.wa_id);
+}
+
+function normalizeWaId(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function openNewChat() {
+  const waId = normalizeWaId(newWaId.value);
+  if (!waId || waId.length < 8) {
+    newWaIdError.value = "Nomor WA tidak valid. Gunakan format negara, contoh: 628123...";
+    return;
+  }
+
+  newWaIdError.value = "";
+  emit("open-wa", waId);
 }
 
 function statusClass(status) {
@@ -43,6 +62,32 @@ function displayStatus(status) {
       <span class="rounded-full bg-orange-500 px-3 py-0.5 text-sm font-semibold text-white">
         {{ conversations.length }}
       </span>
+    </div>
+
+    <div class="mb-3 rounded-xl border border-[#e7dbcd] bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+      <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        New Chat
+      </p>
+      <div class="flex items-center gap-2">
+        <input
+          v-model.trim="newWaId"
+          type="text"
+          inputmode="numeric"
+          class="w-full rounded-lg border border-[#dccbb8] bg-white px-3 py-2 text-sm outline-none ring-orange-300 placeholder:text-slate-400 focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          placeholder="6281234567890"
+          @keyup.enter="openNewChat"
+        />
+        <button
+          type="button"
+          class="rounded-lg bg-orange-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-orange-600"
+          @click="openNewChat"
+        >
+          Open
+        </button>
+      </div>
+      <p v-if="newWaIdError" class="mt-2 text-xs text-rose-600 dark:text-rose-400">
+        {{ newWaIdError }}
+      </p>
     </div>
 
     <div

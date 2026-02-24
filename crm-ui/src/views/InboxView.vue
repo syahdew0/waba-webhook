@@ -36,6 +36,11 @@ async function selectConversation(waId) {
   await router.push(`/chat/${waId}`);
 }
 
+async function openNewWaChat(waId) {
+  if (!waId) return;
+  await router.push(`/chat/${waId}`);
+}
+
 async function refreshConversations() {
   await Promise.allSettled([
     store.fetchDbHealth(),
@@ -169,6 +174,7 @@ onUnmounted(() => {
         :loading="loadingConversations"
         :selected-wa-id="selectedWaId || waIdFromRoute"
         @select="selectConversation"
+        @open-wa="openNewWaChat"
       />
     </section>
 
