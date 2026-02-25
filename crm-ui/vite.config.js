@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 
+const apiTarget = process.env.VITE_API_TARGET || "http://localhost:3009";
+
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
   server: {
@@ -11,8 +13,9 @@ export default defineConfig({
       interval: 200
     },
     proxy: {
-      "/api": "http://localhost:3000",
-      "/health": "http://localhost:3000"
+      "/auth": apiTarget,
+      "/api": apiTarget,
+      "/health": apiTarget
     }
   }
 });

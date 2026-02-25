@@ -6,10 +6,12 @@ import ConversationList from "../components/ConversationList.vue";
 import MessageThread from "../components/MessageThread.vue";
 import HealthBadge from "../components/HealthBadge.vue";
 import { useInboxStore } from "../stores/inbox";
+import { clearAuthSession, loadAuthSession } from "../services/authSession";
 
 const route = useRoute();
 const router = useRouter();
 const store = useInboxStore();
+const authSession = ref(loadAuthSession());
 
 const {
   conversations,
@@ -39,6 +41,12 @@ async function selectConversation(waId) {
 async function openNewWaChat(waId) {
   if (!waId) return;
   await router.push(`/chat/${waId}`);
+}
+
+async function logout() {
+  clearAuthSession();
+  authSession.value = null;
+  await router.replace("/login");
 }
 
 async function refreshConversations() {
@@ -148,8 +156,20 @@ onUnmounted(() => {
   <main class="grid min-h-screen grid-cols-1 gap-4 p-4 lg:grid-cols-[24rem_minmax(0,1fr)] lg:p-5">
     <section class="flex min-h-0 flex-col gap-3">
       <div class="flex items-center justify-between">
-        <h1 class="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">WA CRM</h1>
+        <div>
+          <h1 class="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">WA CRM</h1>
+          <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {{ authSession?.user?.email || "Authenticated" }} · Workspace {{ authSession?.workspaceId || "-" }}
+          </p>
+        </div>
         <div class="flex items-center gap-2">
+          <button
+            class="rounded-xl border border-[#dfcfbc] bg-[#fffdfa] px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-rose-300 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+            type="button"
+            @click="logout"
+          >
+            Logout
+          </button>
           <button
             class="rounded-xl border border-[#dfcfbc] bg-[#fffdfa] px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-orange-300 hover:bg-orange-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
             type="button"
