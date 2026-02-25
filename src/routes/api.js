@@ -1,4 +1,6 @@
 const express = require("express");
+const { requireAuth } = require("../middleware/auth");
+const { requireWorkspaceContext } = require("../middleware/workspaceContext");
 const {
   listConversations,
   listMessagesByWaId,
@@ -6,19 +8,42 @@ const {
   getConversationWindowStatus,
 } = require("../services/inboxStore");
 const { sendTextMessage, sendTemplateMessage, listMessageTemplates } = require("../services/whatsappApi");
+const {
+  ChannelError,
+  listWorkspaceChannels,
+  createWorkspaceChannel,
+  updateWorkspaceChannel,
+  getWorkspaceChannelRuntime,
+} = require("../services/channelStore");
 
 const router = express.Router();
 let templatesCache = {
-  at: 0,
-  data: [],
+  // cache key => { at, data }
 };
 const TEMPLATE_CACHE_TTL_MS = 60 * 1000;
+
+router.use(requireAuth);
+router.use(requireWorkspaceContext);
+
+function getRequestedChannelId(req) {
+  const raw = req.get("X-Channel-Id") || req.query.channel_id || req.body?.channel_id || null;
+  const id = Number(raw || 0);
+  return id > 0 ? id : null;
+}
+
+async function getWorkspaceChannelRuntimeFromRequest(req) {
+  return getWorkspaceChannelRuntime({
+    workspaceId: req.workspace.id,
+    channelId: getRequestedChannelId(req),
+  });
+}
 
 router.get("/conversations", async (req, res) => {
   try {
     const data = await listConversations({
       limit: req.query.limit,
       q: req.query.q,
+      workspaceId: req.workspace.id,
     });
     return res.json({ ok: true, data });
   } catch (err) {
@@ -40,6 +65,7 @@ router.get("/messages", async (req, res) => {
     const data = await listMessagesByWaId(waId, {
       limit: req.query.limit,
       before: req.query.before,
+      workspaceId: req.workspace.id,
     });
     return res.json({ ok: true, data });
   } catch (err) {
@@ -51,20 +77,80 @@ router.get("/messages", async (req, res) => {
   }
 });
 
+router.get("/integrations/wa-channels", async (req, res) => {
+  try {
+    const data = await listWorkspaceChannels(req.workspace.id);
+    return res.json({ ok: true, data });
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      error: String(err?.message || err || "failed to list wa channels"),
+    });
+  }
+});
+
+router.post("/integrations/wa-channels", async (req, res) => {
+  try {
+    const data = await createWorkspaceChannel({
+      workspaceId: req.workspace.id,
+      actorUserId: Number(req.auth?.sub || 0) || null,
+      payload: req.body || {},
+    });
+    return res.status(201).json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof ChannelError) {
+      return res.status(err.status).json({ ok: false, code: err.code, error: err.message });
+    }
+    return res.status(500).json({
+      ok: false,
+      error: String(err?.message || err || "failed to create wa channel"),
+    });
+  }
+});
+
+router.patch("/integrations/wa-channels/:id", async (req, res) => {
+  try {
+    const channelId = Number(req.params.id || 0);
+    if (!channelId) {
+      return res.status(400).json({ ok: false, error: "invalid channel id" });
+    }
+
+    const data = await updateWorkspaceChannel({
+      workspaceId: req.workspace.id,
+      channelId,
+      actorUserId: Number(req.auth?.sub || 0) || null,
+      payload: req.body || {},
+    });
+    return res.json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof ChannelError) {
+      return res.status(err.status).json({ ok: false, code: err.code, error: err.message });
+    }
+    return res.status(500).json({
+      ok: false,
+      error: String(err?.message || err || "failed to update wa channel"),
+    });
+  }
+});
+
 router.get("/templates", async (req, res) => {
   const now = Date.now();
   const force = String(req.query.force || "") === "1";
 
-  if (!force && templatesCache.data.length > 0 && now - templatesCache.at < TEMPLATE_CACHE_TTL_MS) {
-    return res.json({
-      ok: true,
-      source: "cache",
-      data: templatesCache.data,
-    });
-  }
-
   try {
-    const result = await listMessageTemplates();
+    const runtime = await getWorkspaceChannelRuntimeFromRequest(req);
+    const cacheKey = `${req.workspace.id}:${runtime.channel.id}`;
+    const cached = templatesCache[cacheKey];
+
+    if (!force && cached?.data?.length > 0 && now - cached.at < TEMPLATE_CACHE_TTL_MS) {
+      return res.json({
+        ok: true,
+        source: "cache",
+        data: cached.data,
+      });
+    }
+
+    const result = await listMessageTemplates({ runtime });
     const rows = Array.isArray(result?.data) ? result.data : [];
     const templates = rows
       .filter((t) => t?.name && t?.language)
@@ -78,13 +164,17 @@ router.get("/templates", async (req, res) => {
       }))
       .sort((a, b) => a.templateName.localeCompare(b.templateName));
 
-    templatesCache = { at: now, data: templates };
+    templatesCache[cacheKey] = { at: now, data: templates };
     return res.json({
       ok: true,
       source: "meta",
       data: templates,
+      channel_id: runtime.channel.id,
     });
   } catch (err) {
+    if (err instanceof ChannelError) {
+      return res.status(err.status).json({ ok: false, code: err.code, error: err.message });
+    }
     const upstream = err?.response?.data;
     console.error("GET /api/templates failed:", upstream || err);
     return res.status(err?.response?.status || 500).json({
@@ -114,6 +204,16 @@ router.post("/messages/send", async (req, res) => {
   }
 
   try {
+    let runtime;
+    try {
+      runtime = await getWorkspaceChannelRuntimeFromRequest(req);
+    } catch (err) {
+      if (err instanceof ChannelError) {
+        return res.status(err.status).json({ ok: false, code: err.code, error: err.message });
+      }
+      throw err;
+    }
+
     const windowStatus = await getConversationWindowStatus(to);
     if (!windowStatus.is_open) {
       return res.status(409).json({
@@ -132,6 +232,7 @@ router.post("/messages/send", async (req, res) => {
       to,
       body: text.trim(),
       replyToMessageId,
+      runtime,
     });
 
     const messageId = waResponse?.messages?.[0]?.id;
@@ -141,7 +242,7 @@ router.post("/messages/send", async (req, res) => {
 
     await saveOutboundMessage({
       waId: to,
-      phoneNumberId: process.env.PHONE_NUMBER_ID || "",
+      phoneNumberId: runtime.channel.phone_number_id || process.env.PHONE_NUMBER_ID || "",
       messageId,
       messageType: "text",
       body: text.trim(),
@@ -162,6 +263,7 @@ router.post("/messages/send", async (req, res) => {
         message_id: messageId,
         to,
         type: "text",
+        channel_id: runtime.channel.id,
       },
     });
   } catch (err) {
@@ -192,11 +294,22 @@ router.post("/messages/send-template", async (req, res) => {
   }
 
   try {
+    let runtime;
+    try {
+      runtime = await getWorkspaceChannelRuntimeFromRequest(req);
+    } catch (err) {
+      if (err instanceof ChannelError) {
+        return res.status(err.status).json({ ok: false, code: err.code, error: err.message });
+      }
+      throw err;
+    }
+
     const waResponse = await sendTemplateMessage({
       to,
       templateName,
       languageCode,
       bodyParams,
+      runtime,
     });
 
     const messageId = waResponse?.messages?.[0]?.id;
@@ -206,7 +319,7 @@ router.post("/messages/send-template", async (req, res) => {
 
     await saveOutboundMessage({
       waId: to,
-      phoneNumberId: process.env.PHONE_NUMBER_ID || "",
+      phoneNumberId: runtime.channel.phone_number_id || process.env.PHONE_NUMBER_ID || "",
       messageId,
       messageType: "template",
       body: `[template:${templateName}]`,
@@ -232,6 +345,7 @@ router.post("/messages/send-template", async (req, res) => {
         type: "template",
         template_name: templateName,
         language_code: languageCode,
+        channel_id: runtime.channel.id,
       },
     });
   } catch (err) {

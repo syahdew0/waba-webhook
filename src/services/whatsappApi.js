@@ -1,16 +1,21 @@
 const axios = require("axios");
 
-function getConfig() {
+function getConfig(overrides = {}) {
   const accessToken = process.env.ACCESS_TOKEN || "";
   const phoneNumberId = process.env.PHONE_NUMBER_ID || "";
   const wabaId = process.env.WABA_ID || "";
   const graphVersion = process.env.WA_GRAPH_VERSION || "v22.0";
 
-  return { accessToken, phoneNumberId, wabaId, graphVersion };
+  return {
+    accessToken: overrides.accessToken || accessToken,
+    phoneNumberId: overrides.phoneNumberId || phoneNumberId,
+    wabaId: overrides.wabaId || wabaId,
+    graphVersion: overrides.graphVersion || graphVersion,
+  };
 }
 
-function assertConfig() {
-  const { accessToken, phoneNumberId } = getConfig();
+function assertConfig(overrides = {}) {
+  const { accessToken, phoneNumberId } = getConfig(overrides);
   if (!accessToken) {
     throw new Error("ACCESS_TOKEN missing");
   }
@@ -19,8 +24,8 @@ function assertConfig() {
   }
 }
 
-function assertTemplateListConfig() {
-  const { accessToken, wabaId } = getConfig();
+function assertTemplateListConfig(overrides = {}) {
+  const { accessToken, wabaId } = getConfig(overrides);
   if (!accessToken) {
     throw new Error("ACCESS_TOKEN missing");
   }
@@ -29,9 +34,20 @@ function assertTemplateListConfig() {
   }
 }
 
-async function sendTextMessage({ to, body, replyToMessageId }) {
-  assertConfig();
-  const { accessToken, phoneNumberId, graphVersion } = getConfig();
+function toRuntimeConfig(runtime) {
+  if (!runtime) return {};
+  return {
+    accessToken: runtime.credentials?.access_token || runtime.accessToken || "",
+    phoneNumberId: runtime.channel?.phone_number_id || runtime.phoneNumberId || "",
+    wabaId: runtime.channel?.waba_id || runtime.wabaId || "",
+    graphVersion: runtime.graphVersion || process.env.WA_GRAPH_VERSION || "v22.0",
+  };
+}
+
+async function sendTextMessage({ to, body, replyToMessageId, runtime }) {
+  const cfgOverrides = toRuntimeConfig(runtime);
+  assertConfig(cfgOverrides);
+  const { accessToken, phoneNumberId, graphVersion } = getConfig(cfgOverrides);
 
   const payload = {
     messaging_product: "whatsapp",
@@ -59,9 +75,10 @@ async function sendTextMessage({ to, body, replyToMessageId }) {
   return response.data;
 }
 
-async function sendTemplateMessage({ to, templateName, languageCode, bodyParams = [] }) {
-  assertConfig();
-  const { accessToken, phoneNumberId, graphVersion } = getConfig();
+async function sendTemplateMessage({ to, templateName, languageCode, bodyParams = [], runtime }) {
+  const cfgOverrides = toRuntimeConfig(runtime);
+  assertConfig(cfgOverrides);
+  const { accessToken, phoneNumberId, graphVersion } = getConfig(cfgOverrides);
   const url = `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`;
 
   const payload = {
@@ -119,9 +136,10 @@ async function sendTemplateMessage({ to, templateName, languageCode, bodyParams 
   }
 }
 
-async function listMessageTemplates() {
-  assertTemplateListConfig();
-  const { accessToken, wabaId, graphVersion } = getConfig();
+async function listMessageTemplates({ runtime } = {}) {
+  const cfgOverrides = toRuntimeConfig(runtime);
+  assertTemplateListConfig(cfgOverrides);
+  const { accessToken, wabaId, graphVersion } = getConfig(cfgOverrides);
 
   const url = `https://graph.facebook.com/${graphVersion}/${wabaId}/message_templates`;
   const response = await axios.get(url, {

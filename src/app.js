@@ -3,6 +3,7 @@ const express = require("express");
 const rawBody = require("./middleware/rawBody");
 const webhookRoutes = require("./routes/webhook");
 const apiRoutes = require("./routes/api");
+const authRoutes = require("./routes/auth");
 const { startDedupeCleanupJob, getDbHealthSnapshot } = require("./services/eventStore");
 
 const app = express();
@@ -11,6 +12,7 @@ const app = express();
 app.use(rawBody());
 
 app.use("/webhook", webhookRoutes);
+app.use("/auth", authRoutes);
 app.use("/api", apiRoutes);
 
 app.get("/health", (req, res) => res.json({ ok: true }));

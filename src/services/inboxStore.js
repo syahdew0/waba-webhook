@@ -13,6 +13,7 @@ async function listConversations(options = {}) {
   const limit = Math.min(Math.max(toNumber(options.limit, 50), 1), 200);
   const q = (options.q || "").trim();
   const queryValue = `%${q}%`;
+  const workspaceId = Number(options.workspaceId || 0) || null;
   const [rows] = await db.raw(
     `
       SELECT
@@ -21,6 +22,13 @@ async function listConversations(options = {}) {
         COUNT(*) AS total_messages
       FROM wa_messages wm
       WHERE
+        (? IS NULL OR EXISTS (
+          SELECT 1
+          FROM wa_channels ch
+          WHERE ch.workspace_id = ?
+            AND ch.phone_number_id = wm.phone_number_id
+        ))
+        AND
         (? = '' OR wm.wa_id LIKE ? OR EXISTS (
           SELECT 1
           FROM wa_contacts c
@@ -31,7 +39,7 @@ async function listConversations(options = {}) {
       ORDER BY last_message_at DESC
       LIMIT ?
     `,
-    [q, queryValue, queryValue, limit]
+    [workspaceId, workspaceId, q, queryValue, queryValue, limit]
   );
 
   return Promise.all(
@@ -50,6 +58,14 @@ async function listConversations(options = {}) {
           "created_at"
         )
         .where({ wa_id: waId })
+        .modify((qb) => {
+          if (workspaceId) {
+            qb.whereIn(
+              "phone_number_id",
+              db("wa_channels").select("phone_number_id").where({ workspace_id: workspaceId })
+            );
+          }
+        })
         .orderByRaw("COALESCE(message_ts, created_at) DESC")
         .first();
 
@@ -57,6 +73,14 @@ async function listConversations(options = {}) {
         .select("l.latest_status", "l.latest_status_ts")
         .join("wa_messages as m", "m.message_id", "l.message_id")
         .where("m.wa_id", waId)
+        .modify((qb) => {
+          if (workspaceId) {
+            qb.whereIn(
+              "m.phone_number_id",
+              db("wa_channels").select("phone_number_id").where({ workspace_id: workspaceId })
+            );
+          }
+        })
         .orderBy("l.latest_status_ts", "desc")
         .first();
 
@@ -87,6 +111,7 @@ async function listMessagesByWaId(waId, options = {}) {
   const db = getDb();
   const limit = Math.min(Math.max(toNumber(options.limit, 100), 1), 500);
   const before = options.before ? new Date(options.before) : null;
+  const workspaceId = Number(options.workspaceId || 0) || null;
 
   const query = db("wa_messages")
     .select(
@@ -105,6 +130,13 @@ async function listMessagesByWaId(waId, options = {}) {
       "raw_message"
     )
     .where({ wa_id: waId });
+
+  if (workspaceId) {
+    query.whereIn(
+      "phone_number_id",
+      db("wa_channels").select("phone_number_id").where({ workspace_id: workspaceId })
+    );
+  }
 
   if (before && !Number.isNaN(before.getTime())) {
     query.andWhereRaw("COALESCE(message_ts, created_at) < ?", [before]);
