@@ -8,6 +8,44 @@ function toNumber(value, fallback) {
 
 const WINDOW_24H_MS = 24 * 60 * 60 * 1000;
 
+function parseRawMessage(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  if (typeof raw !== "string") return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function buildMessagePreview(row) {
+  if (row?.text_body) return row.text_body;
+  if (row?.interactive_title) return `[${row.interactive_title}]`;
+
+  const raw = parseRawMessage(row?.raw_message);
+  const type = String(row?.message_type || "").trim();
+
+  if (type === "button") {
+    const title = String(raw?.button?.text || raw?.button?.payload || "").trim();
+    return title || null;
+  }
+
+  if (type === "interactive") {
+    const title = String(
+      raw?.interactive?.button_reply?.title || raw?.interactive?.list_reply?.title || ""
+    ).trim();
+    return title ? `[${title}]` : null;
+  }
+
+  if (type === "template") {
+    const templateName = String(raw?.template?.name || "").trim();
+    if (templateName) return `[template:${templateName}]`;
+  }
+
+  return null;
+}
+
 async function listConversations(options = {}) {
   const db = getDb();
   const limit = Math.min(Math.max(toNumber(options.limit, 50), 1), 200);
@@ -54,6 +92,7 @@ async function listConversations(options = {}) {
           "message_type",
           "text_body",
           "interactive_title",
+          "raw_message",
           "message_ts",
           "created_at"
         )
@@ -94,9 +133,7 @@ async function listConversations(options = {}) {
               message_id: lastMessage.message_id,
               direction: lastMessage.direction,
               message_type: lastMessage.message_type,
-              text:
-                lastMessage.text_body ||
-                (lastMessage.interactive_title ? `[${lastMessage.interactive_title}]` : null),
+              text: buildMessagePreview(lastMessage),
               ts: lastMessage.message_ts || lastMessage.created_at || null,
             }
           : null,

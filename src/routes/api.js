@@ -38,6 +38,35 @@ async function getWorkspaceChannelRuntimeFromRequest(req) {
   });
 }
 
+function parseBodyTemplateMeta(template) {
+  const components = Array.isArray(template?.components) ? template.components : [];
+  const body = components.find((c) => String(c?.type || "").toUpperCase() === "BODY");
+  const bodyText = typeof body?.text === "string" ? body.text : "";
+
+  const placeholderMatches = [...bodyText.matchAll(/{{\s*(\d+)\s*}}/g)];
+  const indexes = [...new Set(placeholderMatches.map((m) => Number(m[1])).filter(Number.isFinite))].sort(
+    (a, b) => a - b
+  );
+
+  let exampleValues = [];
+  const bodyExample = body?.example?.body_text;
+  if (Array.isArray(bodyExample)) {
+    if (Array.isArray(bodyExample[0])) {
+      exampleValues = bodyExample[0].map((x) => String(x ?? ""));
+    } else {
+      exampleValues = bodyExample.map((x) => String(x ?? ""));
+    }
+  }
+
+  return {
+    bodyText: bodyText || null,
+    bodyParamCount: indexes.length,
+    bodyParamKeys: indexes.map((n) => `{{${n}}}`),
+    bodyParamIndexes: indexes,
+    bodyParamExampleValues: exampleValues,
+  };
+}
+
 router.get("/conversations", async (req, res) => {
   try {
     const data = await listConversations({
@@ -161,6 +190,7 @@ router.get("/templates", async (req, res) => {
         languageCode: t.language,
         status: t.status || null,
         category: t.category || null,
+        ...parseBodyTemplateMeta(t),
       }))
       .sort((a, b) => a.templateName.localeCompare(b.templateName));
 

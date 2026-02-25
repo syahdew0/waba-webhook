@@ -149,7 +149,7 @@ async function listMessageTemplates({ runtime } = {}) {
     },
     params: {
       limit: 200,
-      fields: "name,language,status,category",
+      fields: "name,language,status,category,components",
     },
     timeout: 15000,
   });
