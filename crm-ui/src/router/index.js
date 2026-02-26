@@ -1,12 +1,14 @@
 import { createRouter, createWebHistory } from "vue-router";
 import InboxView from "../views/InboxView.vue";
 import LoginView from "../views/LoginView.vue";
+import RegisterView from "../views/RegisterView.vue";
 import { hasAuthSession } from "../services/authSession";
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/login", name: "login", component: LoginView, meta: { public: true } },
+    { path: "/register", name: "register", component: RegisterView, meta: { public: true } },
     { path: "/", name: "inbox", component: InboxView },
     { path: "/chat/:waId", name: "chat", component: InboxView, props: true }
   ]
@@ -23,7 +25,7 @@ router.beforeEach((to) => {
     };
   }
 
-  if (authed && to.name === "login") {
+  if (authed && (to.name === "login" || to.name === "register")) {
     return { name: "inbox" };
   }
 

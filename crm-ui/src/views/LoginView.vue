@@ -115,9 +115,18 @@ async function onSubmit() {
           >
             {{ loading ? "Logging in..." : "Login" }}
           </button>
+
+          <p class="text-center text-sm text-slate-600 dark:text-slate-300">
+            Belum punya akun?
+            <RouterLink
+              class="font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+              :to="{ name: 'register' }"
+            >
+              Register
+            </RouterLink>
+          </p>
         </form>
       </section>
     </div>
   </main>
 </template>
-
